@@ -1,25 +1,34 @@
-from langchain_ollama import Ollama
-from dotenv import load_dotenv
-import os
+from langchain_community.llms import Ollama
+from typing import List, Dict
+from config import config
+import logging
 
-load_dotenv()  # reads .env for OLLAMA_SERVER_URL if specified
+logger = logging.getLogger(__name__)
 
-OLLAMA_SERVER = os.getenv("OLLAMA_SERVER_URL", "http://localhost:11434")
+class SafeOllama:
+    def __init__(self):
+        self.client = Ollama(
+            model=config.MODEL_NAME,
+            server_url=config.OLLAMA_URL,
+            temperature=0.3,
+            num_ctx=2048,
+            num_gpu=0,  # Force CPU-only
+            num_thread=4
+        )
+        self.max_retries = 3
 
-# Instantiate an OpenAI-compatible LLM client pointing to Ollama
-llm = Ollama(model="llama2", server_url=OLLAMA_SERVER)
+    def generate(self, prompt: str, system_msg: str = "") -> str:
+        messages = [{"role": "user", "content": prompt}]
+        if system_msg:
+            messages.insert(0, {"role": "system", "content": system_msg})
 
-def summarize(text: str) -> str:
-    """Generate a concise summary via the local LLM."""
-    prompt = f"Please provide a concise summary:\n\n{text}"
-    response = llm.chat([{"role": "user", "content": prompt}])
-    return response.choices[0].message.content
-
-def generate_hypotheses(summary: str) -> str:
-    """Produce three novel research hypotheses."""
-    prompt = (
-        f"Based on this summary, propose three novel research hypotheses, each "
-        f"numbered: \n\n{summary}"
-    )
-    response = llm.chat([{"role": "user", "content": prompt}])
-    return response.choices[0].message.content
+        for attempt in range(self.max_retries):
+            try:
+                response = self.client.chat(messages)
+                return response['message']['content']
+            except Exception as e:
+                logger.warning(f"LLM attempt {attempt+1} failed: {str(e)}")
+                if attempt == self.max_retries - 1:
+                    return "Model response unavailable - try again later"
+                
+llm = SafeOllama()
