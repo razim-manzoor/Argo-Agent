@@ -1,10 +1,9 @@
 from langchain.agents import Tool, initialize_agent
-from langchain.chains import TransformChain, SimpleSequentialChain
-from typing import Callable
-from argo.config import config
-from argo.llm import llm
+from typing import Callable, List
+from config import config
+from llm import llm
 import logging
-from typing import List
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ class ResearchAgent:
         self.tools = self._create_tools()
         self.agent = initialize_agent(
             self.tools,
-            llm.client,
+            llm,  # Use wrapped instance
             agent="zero-shot-react-description",
             verbose=True,
             max_iterations=5,
@@ -47,7 +46,18 @@ class ResearchAgent:
     @staticmethod
     def arxiv_search(query: str) -> str:
         from arxiv_client import ArXivClient
+        from vector_store import VectorStore
         results = ArXivClient.search(query)
+        
+        # Index papers
+        store = VectorStore()
+        for paper in results:
+            store.index_document({
+                "id": paper["id"],
+                "text": f"{paper['title']}\n{paper['abstract']}",
+                "metadata": paper
+            })
+            
         return f"Found {len(results)} papers: " + "\n".join(
             [f"- {p['title']} ({p['published'][:4]})" for p in results]
         )

@@ -4,6 +4,7 @@ from typing import List, Dict
 from config import config
 import datetime
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ class ArXivClient:
     @staticmethod
     def sanitize_entry(entry: arxiv.Result) -> Dict:
         return {
-            "id": hashlib.md5(entry.entry_id.encode()).hexdigest(),
+            "id": hashlib.sha256(entry.entry_id.encode()).hexdigest()[:32],
             "title": entry.title,
             "abstract": entry.summary,
             "published": entry.published.isoformat(),
@@ -28,7 +29,19 @@ class ArXivClient:
                 sort_by=arxiv.SortCriterion.SubmittedDate,
                 sort_order=arxiv.SortOrder.Descending
             )
-            return [ArXivClient.sanitize_entry(r) for r in search.results()]
+            results = list(search.results())  # Convert generator to list
+            return [ArXivClient.sanitize_entry(r) for r in results]
         except Exception as e:
             logger.error(f"ArXiv search failed: {str(e)}")
             return []
+
+    @staticmethod
+    def download_pdf(url: str, save_path: str) -> bool:
+        try:
+            response = requests.get(url, timeout=10)
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+            return True
+        except Exception as e:
+            logger.error(f"PDF download failed: {str(e)}")
+            return False
