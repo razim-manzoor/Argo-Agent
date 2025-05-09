@@ -7,3 +7,5 @@ sentence-transformers
 pdfplumber
 streamlit
 python-dotenv
+pydantic
+langchain-core
